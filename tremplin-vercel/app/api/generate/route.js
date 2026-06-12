@@ -24,7 +24,7 @@ export async function POST(req) {
   }
 
   const body = {
-    // Vérifie le modèle le plus récent sur https://docs.claude.com
+    // Modèle à jour (juin 2026). Voir les modèles disponibles sur https://platform.claude.com/docs/en/about-claude/models/overview
     model: "claude-sonnet-4-6",
     max_tokens: 1500,
     messages,

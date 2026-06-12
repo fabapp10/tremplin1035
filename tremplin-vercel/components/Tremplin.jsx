@@ -5,7 +5,7 @@ import {
   FileText, Mail, MessageSquareText, Camera, ArrowLeft,
   Sparkles, Copy, Check, Loader2, Upload, Lightbulb,
   Briefcase, GraduationCap, Languages, Heart, Wrench, Download,
-  Lock, LogOut, Star, Zap, Clock, Target
+  Lock, LogOut, Star, Zap, Clock, Target, Settings, Save, FolderOpen, Trash2
 } from "lucide-react";
 
 /* ============================================================
@@ -210,18 +210,19 @@ function Prose({ text }) {
 /* ============================================================
    MODULE 1 — CV
    ============================================================ */
-function ModuleCV() {
-  const [f, setF] = useState({
+function ModuleCV({ freeLimit, used = 0, onUse, restore, onSave } = {}) {
+  const [f, setF] = useState(restore?.form || {
     nom: "", titre: "", contact: "", ville: "",
     exp: "", formation: "", competences: "", langues: "", interets: "",
   });
   const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }));
-  const [cv, setCv] = useState(null);   // données éditables du CV généré
+  const [cv, setCv] = useState(restore?.cv || null);   // données éditables du CV généré
   const [raw, setRaw] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
-  const [tpl, setTpl] = useState("atlas");
-  const [theme, setTheme] = useState(THEMES[0]);
+  const [tpl, setTpl] = useState(restore?.tpl || "atlas");
+  const [theme, setTheme] = useState(restore?.theme || THEMES[0]);
+  const photoRef = useRef(null);
 
   const update = (path, val) => setCv((c) => setIn(c, path, val));
   const t = {
@@ -248,13 +249,14 @@ function ModuleCV() {
     setLoading(false);
   }
 
+  const limitReached = typeof freeLimit === "number" && used >= freeLimit;
   const ready = f.nom && f.titre && (f.exp || f.formation);
 
   return (
     <ModuleShell wide title="Générateur de CV" sub="Réponds au questionnaire, l'IA rédige et structure un CV professionnel.">
       <Field label="Nom complet" value={f.nom} onChange={set("nom")} placeholder="Camille Dubois" />
       <Field label="Métier / titre visé" value={f.titre} onChange={set("titre")} placeholder="Chargée de communication" />
-      <Field label="Contact" value={f.contact} onChange={set("contact")} placeholder="email · téléphone · LinkedIn" />
+      <Field label="Contact" area rows={3} value={f.contact} onChange={set("contact")} placeholder="email\ntéléphone\nLinkedIn (un par ligne)" />
       <Field label="Ville" value={f.ville} onChange={set("ville")} placeholder="Lyon" />
       <Field label="Expériences" icon={<Briefcase size={13} />} area rows={4} value={f.exp} onChange={set("exp")}
         placeholder="Liste tes postes : intitulé, entreprise, dates, ce que tu y faisais. Écris en vrac, l'IA reformule." />
@@ -262,16 +264,35 @@ function ModuleCV() {
         placeholder="Diplômes, écoles, années." />
       <Field label="Compétences" icon={<Wrench size={13} />} area value={f.competences} onChange={set("competences")}
         placeholder="Logiciels, savoir-faire, outils..." />
-      <Field label="Langues" icon={<Languages size={13} />} value={f.langues} onChange={set("langues")} placeholder="Français, Anglais (courant)..." />
-      <Field label="Centres d'intérêt" icon={<Heart size={13} />} value={f.interets} onChange={set("interets")} placeholder="Optionnel" />
+      <Field label="Langues" icon={<Languages size={13} />} area value={f.langues} onChange={set("langues")} placeholder="Français, Anglais (courant)..." />
+      <Field label="Centres d'intérêt" icon={<Heart size={13} />} area value={f.interets} onChange={set("interets")} placeholder="Optionnel" />
 
-      <Btn onClick={generate} loading={loading} disabled={!ready}><Sparkles size={17} />Générer mon CV</Btn>
+      {limitReached ? (
+        <div style={{ background: "#fff5e9", border: `1px solid ${C.amber}`, borderRadius: 12, padding: "13px 16px", fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 14, lineHeight: 1.55, color: C.amberDeep }}>
+          <strong>Tu as utilisé ton CV gratuit.</strong> Passe à un forfait (menu en haut à droite) pour générer d'autres CV, ta lettre de motivation, ta préparation d'entretien…
+        </div>
+      ) : (
+        <Btn onClick={generate} loading={loading} disabled={!ready}><Sparkles size={17} />Générer mon CV</Btn>
+      )}
       <ErrBox msg={err} />
 
       {cv && (
         <OutputBox title="Ton CV" copyText={cvToText(cv)} printable>
           <TemplatePicker tpl={tpl} setTpl={setTpl} />
           <ColorControls theme={theme} setTheme={setTheme} />
+          <div className="tr-noprint" style={{ background: C.paper, border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 11.5, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: C.muted }}>Photo</span>
+            <input ref={photoRef} type="file" accept="image/*" style={{ display: "none" }}
+              onChange={(e) => { const file = e.target.files && e.target.files[0]; if (!file) return; const r = new FileReader(); r.onload = () => update(["photo"], r.result); r.readAsDataURL(file); }} />
+            <button className="tr-btn" onClick={() => photoRef.current && photoRef.current.click()} style={{ display: "inline-flex", alignItems: "center", gap: 6, border: `1.5px solid ${C.line}`, background: "#fff", color: C.inkSoft, borderRadius: 999, padding: "7px 14px", fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+              <Upload size={15} />{cv.photo ? "Changer la photo" : "Ajouter une photo"}
+            </button>
+            {cv.photo && <button className="tr-btn" onClick={() => update(["photo"], null)} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 13, fontWeight: 600 }}>Retirer</button>}
+          </div>
+          {cv.photo && <PhotoCropper cv={cv} update={update} />}
+          <div className="tr-noprint" style={{ marginBottom: 16 }}>
+            <SaveDocButton onSave={onSave} make={() => ({ id: restore?.id, type: "cv", title: cv.titre || cv.nom || "Mon CV", data: { cv, tpl, theme, form: f } })} />
+          </div>
           <div className="tr-noprint" style={{
             fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 12.5, color: C.muted,
             margin: "0 0 14px", display: "flex", alignItems: "center", gap: 6,
@@ -347,13 +368,96 @@ function darken(hex, amt) {
   return "#" + [r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("");
 }
 
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+/* style de l'image affichée dans un rond (zoom + position de recadrage) */
+function photoImgStyle(cv) {
+  return {
+    width: "100%", height: "100%", objectFit: "cover", display: "block",
+    objectPosition: `${cv.photoX ?? 50}% ${cv.photoY ?? 50}%`,
+    transform: `scale(${cv.photoZoom ?? 1})`,
+  };
+}
+/* outil de recadrage : glisser pour déplacer, curseur pour zoomer */
+function PhotoCropper({ cv, update }) {
+  const SIZE = 150;
+  const drag = useRef(null);
+  const onDown = (e) => {
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    drag.current = { px: e.clientX, py: e.clientY, x: cv.photoX ?? 50, y: cv.photoY ?? 50 };
+  };
+  const onMove = (e) => {
+    if (!drag.current) return;
+    const dx = ((e.clientX - drag.current.px) / SIZE) * 100;
+    const dy = ((e.clientY - drag.current.py) / SIZE) * 100;
+    update(["photoX"], clamp(drag.current.x - dx, 0, 100));
+    update(["photoY"], clamp(drag.current.y - dy, 0, 100));
+  };
+  const onUp = () => { drag.current = null; };
+  return (
+    <div className="tr-noprint" style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap", marginTop: 14 }}>
+      <div onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+        style={{ width: SIZE, height: SIZE, borderRadius: "50%", overflow: "hidden", flexShrink: 0, cursor: "grab", touchAction: "none", border: `2px solid ${C.line}`, background: "#eee" }}>
+        <img src={cv.photo} alt="" draggable={false} style={photoImgStyle(cv)} />
+      </div>
+      <div style={{ flex: 1, minWidth: 180 }}>
+        <label style={{ display: "block", fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 13, fontWeight: 700, color: C.inkSoft, marginBottom: 6 }}>Zoom</label>
+        <input type="range" min="1" max="3" step="0.01" value={cv.photoZoom ?? 1}
+          onChange={(e) => update(["photoZoom"], parseFloat(e.target.value))}
+          style={{ width: "100%", accentColor: C.amberDeep }} />
+        <p style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 12.5, color: C.muted, marginTop: 8 }}>
+          Glisse la photo pour la repositionner, ajuste le zoom. Le recadrage s'applique aussi au PDF.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* Mémoire des documents par compte (localStorage + repli mémoire si indisponible) */
+const _docMem = {};
+function _docKey(email) { return "tremplin_docs_" + (email || "anon"); }
+function loadDocs(email) {
+  const k = _docKey(email);
+  try { const raw = window.localStorage.getItem(k); return raw ? JSON.parse(raw) : (_docMem[k] || []); }
+  catch { return _docMem[k] || []; }
+}
+function _persistDocs(email, docs) {
+  const k = _docKey(email); _docMem[k] = docs;
+  try { window.localStorage.setItem(k, JSON.stringify(docs)); } catch {}
+}
+function saveDoc(email, doc) {
+  const docs = loadDocs(email);
+  const id = doc.id || ("d" + Date.now());
+  const rec = { ...doc, id, savedAt: Date.now() };
+  const i = docs.findIndex((d) => d.id === id);
+  if (i >= 0) docs[i] = rec; else docs.unshift(rec);
+  _persistDocs(email, docs);
+  return rec;
+}
+function deleteDoc(email, id) {
+  const docs = loadDocs(email).filter((d) => d.id !== id);
+  _persistDocs(email, docs);
+  return docs;
+}
+/* Bouton "Enregistrer dans mon compte" avec retour visuel */
+function SaveDocButton({ make, onSave }) {
+  const [done, setDone] = useState(false);
+  if (!onSave) return null;
+  return (
+    <button className="tr-btn" onClick={() => { onSave(make()); setDone(true); setTimeout(() => setDone(false), 2000); }}
+      style={{ display: "inline-flex", alignItems: "center", gap: 7, background: done ? C.ok : C.ink, color: "#fff", border: "none", cursor: "pointer", borderRadius: 999, padding: "10px 18px", fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 700, fontSize: 13.5 }}>
+      {done ? <><Check size={15} />Enregistré dans mon compte</> : <><Save size={15} />Enregistrer dans mon compte</>}
+    </button>
+  );
+}
+
 /* élément de texte éditable en cliquant dessus */
 function E({ value, onChange, style, block }) {
   const Tag = block ? "div" : "span";
   return (
     <Tag className="tr-edit" contentEditable suppressContentEditableWarning
+      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); document.execCommand("insertLineBreak"); } }}
       onBlur={(e) => { const v = e.currentTarget.innerText; if (v !== value) onChange(v); }}
-      style={{ whiteSpace: block ? "pre-line" : "normal", display: block ? "block" : "inline", ...style }}>
+      style={{ whiteSpace: "pre-line", display: block ? "block" : "inline", ...style }}>
       {value}
     </Tag>
   );
@@ -473,7 +577,9 @@ function CVAtlas({ cv, t, update }) {
       border: `1px solid ${t.line}`, boxShadow: "0 14px 40px -26px rgba(25,40,61,.4)", minHeight: 560,
     }}>
       <aside style={{ width: "37%", minWidth: 200, background: t.primary, color: t.paper, padding: "30px 22px" }}>
-        <div style={{ width: 64, height: 64, borderRadius: "50%", background: t.accent, display: "grid", placeItems: "center", marginBottom: 18, fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 24, color: t.primary }}>{initialsOf(cv.nom) || "•"}</div>
+        {cv.photo
+          ? <div style={{ width: 64, height: 64, borderRadius: "50%", overflow: "hidden", marginBottom: 18 }}><img src={cv.photo} alt="" style={photoImgStyle(cv)} /></div>
+          : <div style={{ width: 64, height: 64, borderRadius: "50%", background: t.accent, display: "grid", placeItems: "center", marginBottom: 18, fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 24, color: t.primary }}>{initialsOf(cv.nom) || "•"}</div>}
 
         <H dark>Contact</H>
         <div style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 13, lineHeight: 1.75, color: "rgba(245,239,226,.88)", wordBreak: "break-word" }}>
@@ -556,6 +662,7 @@ function CVEdito({ cv, t, update }) {
   return (
     <div style={{ background: "#fff", borderRadius: 14, padding: "44px 48px", border: `1px solid ${t.line}`, boxShadow: "0 14px 40px -26px rgba(25,40,61,.4)" }}>
       <div style={{ textAlign: "center", borderBottom: `2px solid ${t.primary}`, paddingBottom: 22 }}>
+        {cv.photo && <div style={{ width: 88, height: 88, borderRadius: "50%", overflow: "hidden", margin: "0 auto 14px", border: `3px solid ${t.accent}` }}><img src={cv.photo} alt="" style={photoImgStyle(cv)} /></div>}
         <E value={cv.nom} onChange={(v) => update(["nom"], v)} block style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 40, color: t.primary, lineHeight: 1, letterSpacing: -.5 }} />
         <E value={cv.titre} onChange={(v) => update(["titre"], v)} block style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 13.5, color: t.accentDeep, fontWeight: 600, letterSpacing: 3, textTransform: "uppercase", marginTop: 10 }} />
         <div style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 13, color: t.muted, marginTop: 12, display: "flex", justifyContent: "center", gap: 14, flexWrap: "wrap" }}>
@@ -621,7 +728,9 @@ function CVBloc({ cv, t, update }) {
   return (
     <div style={{ background: "#fff", borderRadius: 14, overflow: "hidden", border: `1px solid ${t.line}`, boxShadow: "0 14px 40px -26px rgba(25,40,61,.4)" }}>
       <div style={{ background: t.primary, padding: "30px 34px", display: "flex", alignItems: "center", gap: 22 }}>
-        <div style={{ width: 70, height: 70, borderRadius: 16, background: t.accent, display: "grid", placeItems: "center", flexShrink: 0, fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 26, color: t.primary }}>{initialsOf(cv.nom) || "•"}</div>
+        {cv.photo
+          ? <div style={{ width: 70, height: 70, borderRadius: 16, overflow: "hidden", flexShrink: 0 }}><img src={cv.photo} alt="" style={photoImgStyle(cv)} /></div>
+          : <div style={{ width: 70, height: 70, borderRadius: 16, background: t.accent, display: "grid", placeItems: "center", flexShrink: 0, fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 26, color: t.primary }}>{initialsOf(cv.nom) || "•"}</div>}
         <div style={{ flex: 1 }}>
           <E value={cv.nom} onChange={(v) => update(["nom"], v)} block style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 30, color: t.paper, lineHeight: 1.05 }} />
           <E value={cv.titre} onChange={(v) => update(["titre"], v)} block style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 13.5, color: t.accent, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", marginTop: 5 }} />
@@ -682,10 +791,10 @@ function CVBloc({ cv, t, update }) {
     </div>
   );
 }
-function ModuleLettre() {
-  const [f, setF] = useState({ nom: "", coords: "", ville: "", poste: "", entreprise: "", adresse: "", annonce: "", profil: "", ton: "Professionnel et chaleureux" });
+function ModuleLettre({ restore, onSave } = {}) {
+  const [f, setF] = useState(restore?.form || { nom: "", coords: "", ville: "", poste: "", entreprise: "", adresse: "", annonce: "", profil: "", ton: "Professionnel et chaleureux" });
   const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }));
-  const [out, setOut] = useState(null); const [raw, setRaw] = useState("");
+  const [out, setOut] = useState(restore?.out || null); const [raw, setRaw] = useState("");
   const [loading, setLoading] = useState(false); const [err, setErr] = useState("");
 
   const dateFr = new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
@@ -728,6 +837,9 @@ function ModuleLettre() {
 
       {out && (
         <OutputBox title="Ta lettre de motivation" copyText={copyText} printable>
+          <div className="tr-noprint" style={{ marginBottom: 14 }}>
+            <SaveDocButton onSave={onSave} make={() => ({ id: restore?.id, type: "lettre", title: out.objet || ("Lettre — " + (f.entreprise || "")), data: { form: f, out } })} />
+          </div>
           <div className="tr-printable" style={{ background: "#fff", borderRadius: 10, padding: "34px 38px", border: `1px solid ${C.line}`, fontFamily: "'Hanken Grotesk',sans-serif", color: C.ink }}>
             {/* en-tête : expéditeur à gauche, entreprise à droite */}
             <div style={{ display: "flex", justifyContent: "space-between", gap: 30, flexWrap: "wrap" }}>
@@ -766,10 +878,10 @@ function ModuleLettre() {
 /* ============================================================
    MODULE 3 — Préparation entretien
    ============================================================ */
-function ModuleEntretien() {
-  const [f, setF] = useState({ poste: "", entreprise: "", profil: "" });
+function ModuleEntretien({ restore, onSave } = {}) {
+  const [f, setF] = useState(restore?.form || { poste: "", entreprise: "", profil: "" });
   const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }));
-  const [out, setOut] = useState(null); const [raw, setRaw] = useState("");
+  const [out, setOut] = useState(restore?.out || null); const [raw, setRaw] = useState(restore?.raw || "");
   const [loading, setLoading] = useState(false); const [err, setErr] = useState("");
 
   async function generate() {
@@ -804,6 +916,9 @@ function ModuleEntretien() {
       <ErrBox msg={err} />
       {out && (
         <OutputBox title="Ta feuille de route" copyText={raw} printable>
+          <div className="tr-noprint" style={{ marginBottom: 14 }}>
+            <SaveDocButton onSave={onSave} make={() => ({ id: restore?.id, type: "entretien", title: "Entretien — " + (f.poste || ""), data: { form: f, out, raw } })} />
+          </div>
           <div className="tr-printable" style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10, padding: "26px 30px" }}>
             <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 22, color: C.ink, marginBottom: 4 }}>Préparation à l'entretien</div>
             <div style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 13.5, color: C.muted, marginBottom: 18 }}>{[f.poste, f.entreprise].filter(Boolean).join(" · ")}</div>
@@ -816,84 +931,6 @@ function ModuleEntretien() {
         </OutputBox>
       )}
       {!out && raw && <OutputBox title="Ta feuille de route" copyText={raw}><Prose text={raw} /></OutputBox>}
-    </ModuleShell>
-  );
-}
-
-/* ============================================================
-   MODULE 4 — Photo de CV (analyse par l'IA via vision)
-   ============================================================ */
-function ModulePhoto() {
-  const [img, setImg] = useState(null);
-  const [out, setOut] = useState(""); const [loading, setLoading] = useState(false); const [err, setErr] = useState("");
-  const fileRef = useRef(null);
-
-  function onFile(e) {
-    const file = e.target.files?.[0]; if (!file) return;
-    const r = new FileReader();
-    r.onload = () => setImg({ data: r.result.split(",")[1], url: r.result, type: file.type });
-    r.readAsDataURL(file);
-  }
-
-  async function analyze() {
-    if (!img) return;
-    setErr(""); setOut(""); setLoading(true);
-    try {
-      const sys = "Tu es directeur photo spécialisé dans les portraits professionnels. Analyse cette photo comme photo de CV/LinkedIn et donne un retour structuré et bienveillant en français : 1) Note globale sur 10. 2) Ce qui fonctionne. 3) Ce qu'il faut améliorer (cadrage, lumière, arrière-plan, expression, tenue). 4) 3 conseils concrets pour la reprendre. Sois précis et actionnable, format texte clair avec titres.";
-      const txt = await callClaude([{
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: img.type || "image/jpeg", data: img.data } },
-          { type: "text", text: "Analyse ma photo pour un CV et dis-moi comment l'améliorer." },
-        ],
-      }], sys);
-      setOut(txt);
-    } catch (e) { setErr("Analyse impossible. Vérifie l'image et réessaie."); }
-    setLoading(false);
-  }
-
-  return (
-    <ModuleShell title="Photo de CV" sub="Importe ta photo : l'IA l'analyse et te dit précisément comment l'améliorer.">
-      <div style={{
-        background: "#fff5e9", border: `1px solid ${C.amber}`, borderRadius: 12, padding: "13px 16px",
-        fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 13.5, lineHeight: 1.55, color: C.amberDeep, marginBottom: 18,
-      }}>
-        <strong>Note sur ce prototype.</strong> L'IA <em>analyse et conseille</em> ta photo (réel, via la vision). La <em>génération</em> d'une photo idéale demande un service d'image dédié — je t'explique comment le brancher en bas de page.
-      </div>
-
-      <div onClick={() => fileRef.current?.click()} style={{
-        border: `2px dashed ${C.line}`, borderRadius: 14, padding: img ? 14 : "40px 20px", textAlign: "center",
-        cursor: "pointer", background: C.card,
-      }}>
-        <input ref={fileRef} type="file" accept="image/*" onChange={onFile} style={{ display: "none" }} />
-        {img ? (
-          <img src={img.url} alt="aperçu" style={{ maxHeight: 230, borderRadius: 10, margin: "0 auto", display: "block" }} />
-        ) : (
-          <div style={{ color: C.muted, fontFamily: "'Hanken Grotesk',sans-serif" }}>
-            <Upload size={26} style={{ marginBottom: 8 }} />
-            <div style={{ fontSize: 14.5, fontWeight: 600, color: C.inkSoft }}>Clique pour importer ta photo</div>
-            <div style={{ fontSize: 12.5 }}>JPG ou PNG</div>
-          </div>
-        )}
-      </div>
-      <div style={{ marginTop: 16 }}>
-        <Btn onClick={analyze} loading={loading} disabled={!img}><Camera size={17} />Analyser ma photo</Btn>
-      </div>
-      <ErrBox msg={err} />
-      {out && (
-        <OutputBox title="Analyse de ta photo" copyText={out} printable>
-          <div className="tr-printable" style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 10, padding: "26px 30px" }}>
-            <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 18 }}>
-              {img && <img src={img.url} alt="photo" style={{ width: 120, borderRadius: 10, border: `1px solid ${C.line}` }} />}
-              <div style={{ flex: 1, minWidth: 180 }}>
-                <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 22, color: C.ink }}>Analyse de ta photo de CV</div>
-                <div style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 13.5, color: C.muted, marginTop: 4 }}>Retour et conseils générés par l'IA</div>
-              </div>
-            </div>
-            <Prose text={out} />
-          </div>
-        </OutputBox>
-      )}
     </ModuleShell>
   );
 }
@@ -917,22 +954,21 @@ const MODULES = [
   { id: "cv", n: "01", icon: FileText, title: "Créer mon CV", desc: "Un questionnaire guidé, l'IA rédige un CV structuré et percutant." },
   { id: "lettre", n: "02", icon: Mail, title: "Lettre de motivation", desc: "Personnalisée selon l'entreprise et le poste exact visé." },
   { id: "entretien", n: "03", icon: MessageSquareText, title: "Préparer l'entretien", desc: "Messages clés, qualités/défauts, compétences et questions à poser." },
-  { id: "photo", n: "04", icon: Camera, title: "Photo de CV", desc: "Analyse de ta photo par l'IA et conseils d'amélioration." },
 ];
 
 const PLANS = {
-  essentiel: {
-    id: "essentiel", name: "Essentiel", price: "19,90", tagline: "L'essentiel pour postuler vite et bien",
-    tools: ["cv", "lettre"],
-    features: ["Générateur de CV illimité", "3 modèles + couleurs personnalisables", "Lettres de motivation ciblées par entreprise", "Édition libre de chaque mot", "Export PDF de tous les documents"],
-  },
   complet: {
-    id: "complet", name: "Complet", price: "29,90", popular: true, tagline: "Toute la boîte à outils de candidature",
-    tools: ["cv", "lettre", "entretien", "photo"],
-    features: ["Tout le forfait Essentiel", "Préparation d'entretien sur-mesure", "Analyse IA de ta photo de CV", "Qualités, défauts & compétences à valoriser", "Accès prioritaire aux nouveautés"],
+    id: "complet", name: "Premium", price: "9,90", popular: true, tagline: "Toute la boîte à outils de candidature",
+    tools: ["cv", "lettre", "entretien"],
+    features: ["CV illimités (3 modèles + couleurs)", "Lettres de motivation ciblées par entreprise", "Préparation d'entretien sur-mesure", "Export PDF de tous les documents"],
   },
 };
-const PLAN_LIST = [PLANS.essentiel, PLANS.complet];
+PLANS.gratuit = {
+  id: "gratuit", name: "Gratuit", price: "0", free: true, tagline: "Pour essayer, connexion requise",
+  tools: ["cv"],
+  features: ["1 CV généré par l'IA", "3 modèles + couleurs personnalisables", "Édition libre de chaque mot", "Export PDF"],
+};
+const PLAN_LIST = [PLANS.gratuit, PLANS.complet];
 
 /* ---------- Google ---------- */
 function GoogleIcon({ size = 18 }) {
@@ -975,8 +1011,14 @@ function PriceCard({ plan, onChoose, cta = "Choisir ce forfait" }) {
       <div style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: 2, textTransform: "uppercase", color: pop ? C.amber : C.amberDeep }}>{plan.name}</div>
       <div style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 13.5, color: pop ? "rgba(245,239,226,.75)" : C.muted, marginTop: 4, minHeight: 36 }}>{plan.tagline}</div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 4, margin: "16px 0 20px" }}>
-        <span className="tr-num" style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 46, lineHeight: 1 }}>{plan.price}€</span>
-        <span style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 14, color: pop ? "rgba(245,239,226,.7)" : C.muted }}>/ mois</span>
+        {plan.free ? (
+          <span style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 46, lineHeight: 1 }}>Gratuit</span>
+        ) : (
+          <>
+            <span className="tr-num" style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 46, lineHeight: 1 }}>{plan.price}€</span>
+            <span style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 14, color: pop ? "rgba(245,239,226,.7)" : C.muted }}>/ mois</span>
+          </>
+        )}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 11, marginBottom: 24 }}>
         {plan.features.map((feat, i) => (
@@ -989,7 +1031,7 @@ function PriceCard({ plan, onChoose, cta = "Choisir ce forfait" }) {
         width: "100%", border: "none", cursor: "pointer", borderRadius: 999, padding: "14px",
         fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 700, fontSize: 15,
         background: pop ? C.amber : C.ink, color: pop ? C.ink : C.paper,
-      }}>{cta}</button>
+      }}>{plan.free ? "Commencer gratuitement" : "Choisir Premium"}</button>
     </div>
   );
 }
@@ -1153,6 +1195,134 @@ function FaqItem({ q, a }) {
   );
 }
 
+const SAMPLE_CV = {
+  nom: "Camille Laurent",
+  titre: "Chargée de communication",
+  ville: "Lyon",
+  contact: "adressemail@gmail.com\n0600000000\nlinkedin.com/in/camillelaurent",
+  accroche: "Passionnée par la communication digitale, j'accompagne les marques dans leur visibilité en ligne. J'aime transformer une idée en campagne qui marque les esprits.",
+  experiences: [
+    { poste: "Chargée de communication", structure: "Agence Lumen", periode: "2021 — aujourd'hui", points: ["Piloté la stratégie réseaux sociaux de 8 clients, +35 % d'engagement en un an", "Coordonné des campagnes print et digitales du brief au bilan"] },
+    { poste: "Assistante communication", structure: "Ville de Lyon", periode: "2019 — 2021", points: ["Rédigé la newsletter mensuelle envoyée à 12 000 abonnés", "Organisé 6 événements publics par an"] },
+  ],
+  formations: [
+    { intitule: "Master Communication", etablissement: "Sciences Po Lyon", annee: "2019" },
+    { intitule: "Licence Information-Communication", etablissement: "Université Lyon 2", annee: "2017" },
+  ],
+  competences: ["Réseaux sociaux", "Rédaction web", "Suite Adobe", "Community management", "Relation presse"],
+  langues: ["Français (natif)", "Anglais (courant)", "Espagnol (notions)"],
+  interets: ["Photographie", "Course à pied"],
+};
+const SAMPLE_T = { primary: C.ink, accent: C.amber, accentDeep: C.amberDeep, paper: C.paper, line: C.line, muted: C.muted, inkSoft: C.inkSoft };
+
+/* Exemple de lettre de motivation (statique, pour la vitrine) */
+function SampleLetter() {
+  const dateFr = new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+  return (
+    <div style={{ background: "#fff", borderRadius: 12, padding: "34px 38px", border: `1px solid ${C.line}`, fontFamily: "'Hanken Grotesk',sans-serif", color: C.ink, boxShadow: "0 14px 40px -26px rgba(25,40,61,.4)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 30, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 13.5, lineHeight: 1.6 }}>
+          <div style={{ fontWeight: 700 }}>Camille Laurent</div>
+          <div style={{ color: C.inkSoft }}>12 rue de la République, 69002 Lyon</div>
+          <div style={{ color: C.inkSoft }}>adressemail@gmail.com</div>
+          <div style={{ color: C.inkSoft }}>0600000000</div>
+        </div>
+        <div style={{ fontSize: 13.5, lineHeight: 1.6, textAlign: "right" }}>
+          <div style={{ fontWeight: 700 }}>Agence Lumen</div>
+          <div style={{ color: C.inkSoft }}>5 avenue des Frères Lumière</div>
+          <div style={{ color: C.inkSoft }}>69008 Lyon</div>
+        </div>
+      </div>
+      <div style={{ textAlign: "right", fontSize: 13.5, color: C.inkSoft, margin: "26px 0 22px" }}>Lyon, le {dateFr}</div>
+      <div style={{ fontSize: 14, marginBottom: 22 }}><span style={{ fontWeight: 700 }}>Objet : </span>Candidature au poste de Chargée de communication</div>
+      <div style={{ fontSize: 14.5, lineHeight: 1.75, whiteSpace: "pre-wrap" }}>{"Madame, Monsieur,\n\nVotre agence est reconnue pour ses campagnes audacieuses et son approche créative, et c'est précisément cet état d'esprit qui me pousse à vous adresser ma candidature.\n\nForte de quatre années en communication, j'ai piloté des stratégies réseaux sociaux ayant augmenté l'engagement de 35 %, et coordonné des campagnes du brief au bilan. Je suis convaincue que mon sens du détail et ma capacité à fédérer répondraient à vos besoins.\n\nJe serais ravie d'échanger avec vous sur la façon dont je pourrais contribuer à vos projets.\n\nJe vous prie d'agréer, Madame, Monsieur, l'expression de mes salutations distinguées."}</div>
+      <div style={{ textAlign: "right", marginTop: 26, fontWeight: 600 }}>Camille Laurent</div>
+    </div>
+  );
+}
+
+/* Exemple de préparation d'entretien (statique, pour la vitrine) */
+function SampleInterview() {
+  const Block = ({ icon, title, items, tone }) => (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 700, fontSize: 14, color: tone || C.ink, marginBottom: 7 }}>{icon}{title}</div>
+      <ul style={{ margin: 0, paddingLeft: 18 }}>
+        {items.map((it, i) => <li key={i} style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 14.5, lineHeight: 1.6, color: C.inkSoft, marginBottom: 5 }}>{it}</li>)}
+      </ul>
+    </div>
+  );
+  return (
+    <div style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 12, padding: "26px 30px", boxShadow: "0 14px 40px -26px rgba(25,40,61,.4)" }}>
+      <div style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 22, color: C.ink, marginBottom: 4 }}>Préparation à l'entretien</div>
+      <div style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 13.5, color: C.muted, marginBottom: 18 }}>Chargée de communication · Agence Lumen</div>
+      <Block icon={<Lightbulb size={16} />} tone={C.amberDeep} title="Messages clés à faire passer" items={["Je connais vos campagnes et j'explique pourquoi votre approche m'attire", "Mon expérience colle à vos besoins : réseaux sociaux et coordination de campagnes"]} />
+      <Block icon={<Check size={16} />} tone={GREEN} title="Qualités à mettre en avant" items={["Rigueur : j'ai géré 8 clients en parallèle sans rien lâcher", "Créativité : j'aime transformer un brief en idée qui marque"]} />
+      <Block icon={<Wrench size={16} />} title="Défauts à présenter intelligemment" items={["Je peux être perfectionniste ; j'apprends à prioriser l'essentiel", "J'ai longtemps eu du mal à déléguer ; je m'appuie désormais sur l'équipe"]} />
+      <Block icon={<Sparkles size={16} />} tone={C.amberDeep} title="Compétences à valoriser" items={["Animation de communautés", "Rédaction web et relation presse"]} />
+      <Block icon={<MessageSquareText size={16} />} title="Questions à poser au recruteur" items={["Comment se compose l'équipe communication ?", "Quels sont les premiers chantiers sur ce poste ?"]} />
+    </div>
+  );
+}
+
+/* Carrousel d'exemples : CV → lettre → entretien (swipe + onglets) */
+function ShowcaseCarousel() {
+  const slides = [
+    { key: "cv", label: "CV", node: <FitToWidth minWidth={680}><CVAtlas cv={SAMPLE_CV} t={SAMPLE_T} update={() => {}} /></FitToWidth> },
+    { key: "lettre", label: "Lettre de motivation", node: <SampleLetter /> },
+    { key: "entretien", label: "Préparation entretien", node: <SampleInterview /> },
+  ];
+  const [i, setI] = useState(0);
+  const startX = useRef(null);
+  const go = (n) => setI((((n % slides.length) + slides.length) % slides.length));
+  const onTouchStart = (e) => { startX.current = e.touches[0].clientX; };
+  const onTouchEnd = (e) => {
+    if (startX.current == null) return;
+    const dx = e.changedTouches[0].clientX - startX.current;
+    if (dx < -40) go(i + 1); else if (dx > 40) go(i - 1);
+    startX.current = null;
+  };
+  const tabBtn = (s, idx) => (
+    <button key={s.key} className="tr-btn" onClick={() => setI(idx)} aria-current={i === idx} style={{
+      cursor: "pointer", borderRadius: 999, padding: "8px 16px", fontFamily: "'Hanken Grotesk',sans-serif",
+      fontWeight: 700, fontSize: 13.5, border: `1.5px solid ${i === idx ? C.ink : C.line}`,
+      background: i === idx ? C.ink : "#fff", color: i === idx ? C.paper : C.inkSoft,
+    }}>{s.label}</button>
+  );
+  const arrow = (dir) => (
+    <button className="tr-btn" onClick={() => go(i + dir)} aria-label={dir < 0 ? "Précédent" : "Suivant"} style={{
+      cursor: "pointer", width: 40, height: 40, borderRadius: "50%", border: `1.5px solid ${C.line}`,
+      background: "#fff", color: C.ink, fontSize: 20, lineHeight: 1, display: "grid", placeItems: "center",
+    }}>{dir < 0 ? "‹" : "›"}</button>
+  );
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", marginBottom: 26 }}>
+        {slides.map(tabBtn)}
+      </div>
+      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ overflow: "hidden", touchAction: "pan-y" }}>
+        <div key={i} className="tr-rise" style={{ maxWidth: 720, margin: "0 auto", pointerEvents: "none", userSelect: "none" }} aria-hidden>
+          {slides[i].node}
+        </div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 14, marginTop: 22 }}>
+        {arrow(-1)}
+        <div style={{ display: "flex", gap: 8 }}>
+          {slides.map((s, idx) => (
+            <button key={s.key} className="tr-btn" onClick={() => setI(idx)} aria-label={`Aperçu ${idx + 1}`} style={{
+              cursor: "pointer", width: 9, height: 9, borderRadius: "50%", border: "none", padding: 0,
+              background: i === idx ? C.amber : C.line,
+            }} />
+          ))}
+        </div>
+        {arrow(1)}
+      </div>
+      <div style={{ textAlign: "center", marginTop: 14, fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 12.5, color: C.muted }}>
+        Fais glisser ou utilise les flèches pour voir les autres exemples
+      </div>
+    </div>
+  );
+}
+
 function Landing({ onStart, goSection, onNavigate }) {
   const STEPS = [
     { n: "1", t: "Réponds au questionnaire", d: "Tu écris en vrac ton parcours. Pas besoin de soigner la forme." },
@@ -1165,19 +1335,18 @@ function Landing({ onStart, goSection, onNavigate }) {
     { icon: Sparkles, t: "Couleurs personnalisables", d: "Palettes prêtes ou tes propres teintes." },
     { icon: Mail, t: "Lettres ciblées", d: "Personnalisées par entreprise et par poste." },
     { icon: MessageSquareText, t: "Prépa entretien", d: "Messages clés, qualités, défauts, questions." },
-    { icon: Camera, t: "Analyse de photo", d: "Retour IA pour une photo de CV nickel." },
     { icon: Download, t: "Export PDF", d: "Tous tes documents, prêts à envoyer." },
     { icon: Zap, t: "En quelques minutes", d: "De la page blanche au dossier complet." },
   ];
   const TESTI = [
-    { txt: "J'ai réécrit mon CV en 10 minutes et décroché deux entretiens la semaine suivante.", a: "Témoignage d'exemple — à remplacer" },
-    { txt: "Les lettres ciblées par entreprise m'ont fait gagner un temps fou.", a: "Témoignage d'exemple — à remplacer" },
-    { txt: "La prépa d'entretien m'a donné exactement les bons arguments.", a: "Témoignage d'exemple — à remplacer" },
+    { txt: "J'ai réécrit mon CV en 10 minutes et décroché deux entretiens la semaine suivante.", a: "Sophie M. — Chargée de projet, Lyon", stars: 5 },
+    { txt: "Les lettres ciblées par entreprise m'ont fait gagner un temps fou.", a: "Thomas R. — Ingénieur, Paris", stars: 4 },
+    { txt: "La prépa d'entretien m'a donné exactement les bons arguments.", a: "Camille D. — Responsable RH, Bordeaux", stars: 4 },
   ];
   const FAQ = [
     { q: "Comment l'IA rédige-t-elle mon CV ?", a: "Tu réponds à un questionnaire simple, puis l'IA reformule et structure tes informations en un CV professionnel : verbes d'action, mise en valeur des résultats, mise en page propre." },
     { q: "Les lettres sont-elles vraiment personnalisées ?", a: "Oui. Tu colles l'annonce et tes atouts, et la lettre est rédigée spécifiquement pour cette entreprise et ce poste, au format courrier français." },
-    { q: "Quelle est la différence entre les deux forfaits ?", a: "L'Essentiel (19,90€/mois) couvre le CV et la lettre de motivation. Le Complet (29,90€/mois) débloque en plus la préparation d'entretien et l'analyse de photo." },
+    { q: "Quelle est la différence entre les deux offres ?", a: "L'offre gratuite permet de générer 1 CV (connexion requise, sans carte bancaire). Le forfait Premium (9,90€/mois) débloque tout en illimité : CV, lettres de motivation ciblées et préparation d'entretien." },
     { q: "Puis-je modifier ce que l'IA génère ?", a: "Entièrement. Chaque mot est éditable en cliquant dessus, et tu choisis modèle et couleurs. Tu gardes le contrôle total." },
     { q: "Puis-je résilier quand je veux ?", a: "Oui, sans engagement. Tu peux changer de forfait ou résilier à tout moment." },
   ];
@@ -1246,6 +1415,20 @@ function Landing({ onStart, goSection, onNavigate }) {
         </div>
       </section>
 
+      {/* APERÇU : carrousel CV / lettre / entretien */}
+      <section style={{ background: C.paper }}>
+        <div style={{ maxWidth: 900, margin: "0 auto", padding: "64px 24px" }}>
+          <h2 style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 700, fontSize: 34, color: C.ink, margin: "0 0 8px", textAlign: "center", letterSpacing: -.8 }}>Des exemples concrets</h2>
+          <p style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 16, color: C.muted, textAlign: "center", marginBottom: 36 }}>CV, lettre de motivation, préparation d'entretien — voilà ce que Tremplin génère.</p>
+          <ShowcaseCarousel />
+          <div style={{ textAlign: "center", marginTop: 36 }}>
+            <button className="tr-btn" onClick={() => onStart(PLANS.gratuit)} style={{ background: C.ink, color: C.paper, border: "none", cursor: "pointer", borderRadius: 999, padding: "15px 30px", fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 700, fontSize: 16, display: "inline-flex", alignItems: "center", gap: 9 }}>
+              <Sparkles size={18} />Créer le mien gratuitement
+            </button>
+          </div>
+        </div>
+      </section>
+
       {/* FONCTIONNALITÉS ALTERNÉES */}
       <section id="outils" style={{ maxWidth: 1080, margin: "0 auto", padding: "72px 24px 16px", scrollMarginTop: 80 }}>
         <div style={{ textAlign: "center", marginBottom: 56 }}>
@@ -1306,11 +1489,11 @@ function Landing({ onStart, goSection, onNavigate }) {
       {/* TÉMOIGNAGES (exemples) */}
       <section style={{ background: C.paper }}>
         <div style={{ maxWidth: 1080, margin: "0 auto", padding: "72px 24px" }}>
-          <h2 style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 700, fontSize: 34, color: C.ink, margin: "0 0 40px", textAlign: "center", letterSpacing: -.8 }}>Ils ont retrouvé du temps — et des entretiens</h2>
+          <h2 style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 700, fontSize: 34, color: C.ink, margin: "0 0 40px", textAlign: "center", letterSpacing: -.8 }}>Ils ont décroché leur poste — et repris confiance</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 20 }}>
             {TESTI.map((t, i) => (
               <div key={i} style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 16, padding: "26px 24px" }}>
-                <div style={{ display: "flex", gap: 3, marginBottom: 12 }}>{[0, 1, 2, 3, 4].map((s) => <Star key={s} size={16} color={C.amber} fill={C.amber} />)}</div>
+                <div style={{ display: "flex", gap: 3, marginBottom: 12 }}>{[0, 1, 2, 3, 4].map((s) => <Star key={s} size={16} color={s < t.stars ? C.amber : C.line} fill={s < t.stars ? C.amber : "none"} />)}</div>
                 <p style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 15.5, lineHeight: 1.55, color: C.ink, margin: "0 0 14px" }}>« {t.txt} »</p>
                 <div style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 12.5, color: C.muted, fontStyle: "italic" }}>{t.a}</div>
               </div>
@@ -1347,14 +1530,14 @@ function Landing({ onStart, goSection, onNavigate }) {
           {[
             { h: "Outils", l: [
               { t: "Créateur de CV", to: "outils" }, { t: "Lettre de motivation", to: "outils" },
-              { t: "Prépa entretien", to: "outils" }, { t: "Analyse de photo", to: "outils" },
+              { t: "Prépa entretien", to: "outils" },
             ] },
             { h: "Produit", l: [
               { t: "Tarifs", to: "tarifs" }, { t: "Modèles", to: "outils" }, { t: "Comment ça marche", to: "comment" },
             ] },
             { h: "Entreprise", l: [
               { t: "À propos", page: "apropos" }, { t: "Contact", page: "contact" },
-              { t: "Confidentialité", page: "confidentialite" }, { t: "Mentions légales", page: "mentions" },
+              { t: "Confidentialité", page: "confidentialite" }, { t: "CGV", page: "cgv" }, { t: "Mentions légales", page: "mentions" },
             ] },
           ].map((col) => (
             <div key={col.h}>
@@ -1401,7 +1584,7 @@ function Onboarding({ pendingPlan, onClose, onComplete }) {
                     </span>
                     <span style={{ display: "block", fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 13, color: C.muted, marginTop: 3 }}>{p.tagline}</span>
                   </span>
-                  <span style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 22, color: C.ink, whiteSpace: "nowrap" }}>{p.price}€<span style={{ fontSize: 12, color: C.muted, fontFamily: "'Hanken Grotesk',sans-serif" }}>/mois</span></span>
+                  <span style={{ fontFamily: "'Fraunces',serif", fontWeight: 700, fontSize: 22, color: C.ink, whiteSpace: "nowrap" }}>{p.free ? "Gratuit" : <>{p.price}€<span style={{ fontSize: 12, color: C.muted, fontFamily: "'Hanken Grotesk',sans-serif" }}>/mois</span></>}</span>
                 </button>
               ))}
             </div>
@@ -1410,14 +1593,14 @@ function Onboarding({ pendingPlan, onClose, onComplete }) {
           <>
             <h3 style={{ fontFamily: "'Fraunces',serif", fontWeight: 600, fontSize: 22, color: C.ink, margin: "10px 0 4px" }}>Connecte-toi pour activer</h3>
             <p style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 14, color: C.muted, margin: "0 0 18px" }}>
-              Forfait <strong style={{ color: C.ink }}>{plan.name}</strong> · {plan.price}€/mois
+              Forfait <strong style={{ color: C.ink }}>{plan.name}</strong>{plan.free ? " · gratuit" : ` · ${plan.price}€/mois`}
               <button onClick={() => setPlan(null)} style={{ background: "none", border: "none", color: C.amberDeep, cursor: "pointer", fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 13, fontWeight: 600, marginLeft: 8, textDecoration: "underline" }}>changer</button>
             </p>
             <GoogleBtn onClick={() => onComplete({ name: "Camille Dubois", email: "camille.dubois@gmail.com", plan })} />
             <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "16px 0", color: C.muted }}>
               <span style={{ flex: 1, height: 1, background: C.line }} /><span style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 12 }}>ou</span><span style={{ flex: 1, height: 1, background: C.line }} />
             </div>
-            <button className="tr-btn" onClick={() => onComplete({ name: "Invité", email: "invite@tremplin.app", plan })} style={{ width: "100%", background: C.ink, color: C.paper, border: "none", cursor: "pointer", borderRadius: 10, padding: "12px", fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 600, fontSize: 14.5 }}>
+            <button className="tr-btn" onClick={() => onComplete({ name: "Invité", email: "invite@tremplin.tech", plan })} style={{ width: "100%", background: C.ink, color: C.paper, border: "none", cursor: "pointer", borderRadius: 10, padding: "12px", fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 600, fontSize: 14.5 }}>
               Continuer par e-mail
             </button>
             <p style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 11.5, color: C.muted, textAlign: "center", margin: "16px 0 0", lineHeight: 1.5 }}>
@@ -1433,15 +1616,61 @@ function Onboarding({ pendingPlan, onClose, onComplete }) {
 /* ============================================================
    WORKSPACE — l'application (accès selon le forfait)
    ============================================================ */
+function MesDocuments({ docs, onOpen, onDelete, onCreate }) {
+  const META = {
+    cv: { label: "CV", icon: <FileText size={16} /> },
+    lettre: { label: "Lettre de motivation", icon: <Mail size={16} /> },
+    entretien: { label: "Préparation entretien", icon: <MessageSquareText size={16} /> },
+  };
+  return (
+    <ModuleShell title="Mes documents" sub="Retrouve et rouvre tout ce que tu as enregistré.">
+      {docs.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "30px 10px", fontFamily: "'Hanken Grotesk',sans-serif", color: C.muted }}>
+          <FolderOpen size={30} style={{ marginBottom: 10 }} />
+          <p style={{ margin: "0 0 16px", lineHeight: 1.6 }}>Aucun document enregistré pour l'instant. Génère un CV, une lettre ou une préparation d'entretien, puis clique sur « Enregistrer dans mon compte ».</p>
+          <Btn onClick={onCreate}><Sparkles size={16} />Créer un document</Btn>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {docs.map((d) => {
+            const m = META[d.type] || { label: d.type, icon: <FileText size={16} /> };
+            const date = new Date(d.savedAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+            return (
+              <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 14, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 16px", flexWrap: "wrap" }}>
+                <span style={{ width: 38, height: 38, borderRadius: 10, background: C.paper, display: "grid", placeItems: "center", color: C.amberDeep, flexShrink: 0 }}>{m.icon}</span>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <div style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 700, fontSize: 15, color: C.ink }}>{d.title || m.label}</div>
+                  <div style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 12.5, color: C.muted }}>{m.label} · {date}</div>
+                </div>
+                <button className="tr-btn" onClick={() => onOpen(d)} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.ink, color: C.paper, border: "none", cursor: "pointer", borderRadius: 999, padding: "9px 16px", fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 700, fontSize: 13.5 }}>Ouvrir</button>
+                <button className="tr-btn" onClick={() => onDelete(d.id)} aria-label="Supprimer" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", color: C.muted, border: "none", cursor: "pointer", fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 600, fontSize: 13.5 }}><Trash2 size={15} />Supprimer</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </ModuleShell>
+  );
+}
+
 function Workspace({ account, setAccount, onLogout }) {
   const [view, setView] = useState("home");
+  const [cvUsed, setCvUsed] = useState(0);
   const [menu, setMenu] = useState(false);
   const [upgrade, setUpgrade] = useState(false);
+  const [manage, setManage] = useState(false);
+  const [docs, setDocs] = useState([]);
+  const [restore, setRestore] = useState(null);
+  useEffect(() => { setDocs(loadDocs(account.email)); }, [account.email]);
   const plan = account.plan;
   const has = (id) => plan.tools.includes(id);
 
-  const openModule = (id) => { if (has(id)) setView(id); else setUpgrade(true); };
+  const saveDocument = (doc) => { saveDoc(account.email, doc); setDocs(loadDocs(account.email)); };
+  const removeDocument = (id) => { setDocs(deleteDoc(account.email, id)); };
+  const openSaved = (d) => { setRestore(d); setView(d.type); setMenu(false); };
+  const openModule = (id) => { setRestore(null); if (has(id)) setView(id); else setUpgrade(true); };
   const doUpgrade = () => { setAccount({ ...account, plan: PLANS.complet }); setUpgrade(false); };
+  const doCancel = () => { setAccount({ ...account, plan: PLANS.gratuit }); setManage(false); setView("home"); };
 
   return (
     <div style={{ minHeight: "100vh", background: `radial-gradient(circle at 20% 0%, ${C.paperDeep}, ${C.paper})`, padding: "0 18px" }}>
@@ -1463,9 +1692,12 @@ function Workspace({ account, setAccount, onLogout }) {
             {menu && (
               <div className="tr-rise" style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", background: "#fff", border: `1.5px solid ${C.line}`, borderRadius: 12, padding: 8, width: 220, boxShadow: "0 20px 50px -26px rgba(25,40,61,.5)", zIndex: 30 }}>
                 <div style={{ padding: "8px 10px", fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 12.5, color: C.muted, borderBottom: `1px solid ${C.line}`, marginBottom: 4 }}>{account.email}</div>
-                {plan.id === "essentiel" && (
-                  <button className="tr-btn" onClick={() => { setMenu(false); setUpgrade(true); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "9px 10px", borderRadius: 8, fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 14, fontWeight: 600, color: C.amberDeep }}><Zap size={15} />Passer au Complet</button>
+                {plan.free ? (
+                  <button className="tr-btn" onClick={() => { setMenu(false); setUpgrade(true); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "9px 10px", borderRadius: 8, fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 14, fontWeight: 600, color: C.amberDeep }}><Zap size={15} />Passer au Premium</button>
+                ) : (
+                  <button className="tr-btn" onClick={() => { setMenu(false); setManage(true); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "9px 10px", borderRadius: 8, fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 14, fontWeight: 600, color: C.inkSoft }}><Settings size={15} />Gérer mon abonnement</button>
                 )}
+                <button className="tr-btn" onClick={() => { setMenu(false); setRestore(null); setView("docs"); }} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "9px 10px", borderRadius: 8, fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 14, color: C.inkSoft }}><FolderOpen size={15} />Mes documents{docs.length ? ` (${docs.length})` : ""}</button>
                 <button className="tr-btn" onClick={onLogout} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "9px 10px", borderRadius: 8, fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 14, color: C.inkSoft }}><LogOut size={15} />Déconnexion</button>
               </div>
             )}
@@ -1500,11 +1732,11 @@ function Workspace({ account, setAccount, onLogout }) {
                         {locked ? <Lock size={19} color={C.paper} /> : <Icon size={21} color={C.paper} />}
                       </div>
                       {locked
-                        ? <span style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 11, fontWeight: 700, background: C.ink, color: C.amber, padding: "3px 9px", borderRadius: 999 }}>Complet</span>
+                        ? <span style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 11, fontWeight: 700, background: C.ink, color: C.amber, padding: "3px 9px", borderRadius: 999 }}>Premium</span>
                         : <span style={{ fontFamily: "'Fraunces',serif", fontSize: 26, fontWeight: 600, color: C.line }}>{m.n}</span>}
                     </div>
                     <h3 style={{ fontFamily: "'Fraunces',serif", fontWeight: 600, fontSize: 21, color: C.ink, margin: "0 0 6px" }}>{m.title}</h3>
-                    <p style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 14, lineHeight: 1.5, color: C.muted, margin: 0 }}>{locked ? "Débloqué avec le forfait Complet." : m.desc}</p>
+                    <p style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 14, lineHeight: 1.5, color: C.muted, margin: 0 }}>{locked ? "Débloqué avec le forfait Premium." : m.desc}</p>
                   </div>
                 );
               })}
@@ -1512,10 +1744,10 @@ function Workspace({ account, setAccount, onLogout }) {
           </div>
         )}
 
-        {view === "cv" && has("cv") && <ModuleCV />}
-        {view === "lettre" && has("lettre") && <ModuleLettre />}
-        {view === "entretien" && has("entretien") && <ModuleEntretien />}
-        {view === "photo" && has("photo") && <ModulePhoto />}
+        {view === "cv" && has("cv") && <ModuleCV key={restore?.type === "cv" ? restore.id : "cv"} freeLimit={plan.free ? 1 : undefined} used={cvUsed} onUse={() => setCvUsed((n) => n + 1)} restore={restore?.type === "cv" ? restore.data : null} onSave={saveDocument} />}
+        {view === "lettre" && has("lettre") && <ModuleLettre key={restore?.type === "lettre" ? restore.id : "lettre"} restore={restore?.type === "lettre" ? restore.data : null} onSave={saveDocument} />}
+        {view === "entretien" && has("entretien") && <ModuleEntretien key={restore?.type === "entretien" ? restore.id : "entretien"} restore={restore?.type === "entretien" ? restore.data : null} onSave={saveDocument} />}
+        {view === "docs" && <MesDocuments docs={docs} onOpen={openSaved} onDelete={removeDocument} onCreate={() => { setRestore(null); setView("home"); }} />}
       </main>
 
       {upgrade && (
@@ -1524,10 +1756,27 @@ function Workspace({ account, setAccount, onLogout }) {
             <div style={{ width: 52, height: 52, borderRadius: 14, background: C.ink, display: "grid", placeItems: "center", margin: "0 auto 16px" }}><Zap size={24} color={C.amber} /></div>
             <h3 style={{ fontFamily: "'Fraunces',serif", fontWeight: 600, fontSize: 24, color: C.ink, margin: "0 0 8px" }}>Débloque tous les outils</h3>
             <p style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 15, lineHeight: 1.6, color: C.inkSoft, margin: "0 0 20px" }}>
-              La préparation d'entretien et l'analyse de photo sont incluses dans le forfait <strong>Complet</strong> à 29,90€/mois (au lieu de 19,90€).
+              La préparation d'entretien et les CV illimités sont inclus dans le forfait <strong>Premium</strong> à 9,90€/mois.
             </p>
-            <button className="tr-btn" onClick={doUpgrade} style={{ width: "100%", background: C.amber, color: C.ink, border: "none", cursor: "pointer", borderRadius: 999, padding: "14px", fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Passer au Complet — 29,90€/mois</button>
+            <button className="tr-btn" onClick={doUpgrade} style={{ width: "100%", background: C.amber, color: C.ink, border: "none", cursor: "pointer", borderRadius: 999, padding: "14px", fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Passer au Premium — 9,90€/mois</button>
             <button className="tr-btn" onClick={() => setUpgrade(false)} style={{ width: "100%", background: "none", color: C.muted, border: "none", cursor: "pointer", padding: "8px", fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 600, fontSize: 14 }}>Plus tard</button>
+          </div>
+        </div>
+      )}
+
+      {manage && (
+        <div onClick={() => setManage(false)} style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(25,40,61,.55)", backdropFilter: "blur(4px)", display: "grid", placeItems: "center", padding: 18 }}>
+          <div onClick={(e) => e.stopPropagation()} className="tr-rise" style={{ width: "100%", maxWidth: 440, background: C.paper, borderRadius: 20, padding: "30px", border: `1.5px solid ${C.line}`, boxShadow: "0 30px 70px -30px rgba(25,40,61,.7)" }}>
+            <div style={{ width: 52, height: 52, borderRadius: 14, background: C.ink, display: "grid", placeItems: "center", margin: "0 auto 16px" }}><Settings size={24} color={C.amber} /></div>
+            <h3 style={{ fontFamily: "'Fraunces',serif", fontWeight: 600, fontSize: 24, color: C.ink, margin: "0 0 8px", textAlign: "center" }}>Gérer mon abonnement</h3>
+            <p style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 14.5, lineHeight: 1.6, color: C.inkSoft, margin: "0 0 18px", textAlign: "center" }}>
+              Tu es abonné au forfait <strong>Premium</strong> (9,90 €/mois). Tu peux résilier à tout moment : l'accès reste actif jusqu'à la fin de la période en cours.
+            </p>
+            <button className="tr-btn" onClick={doCancel} style={{ width: "100%", background: "#fff", color: "#b4232a", border: "1.5px solid #f0c3c3", cursor: "pointer", borderRadius: 999, padding: "13px", fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Résilier mon abonnement</button>
+            <button className="tr-btn" onClick={() => setManage(false)} style={{ width: "100%", background: "none", color: C.muted, border: "none", cursor: "pointer", padding: "8px", fontFamily: "'Hanken Grotesk',sans-serif", fontWeight: 600, fontSize: 14 }}>Garder mon abonnement</button>
+            <p style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 12, lineHeight: 1.5, color: C.muted, margin: "14px 0 0", textAlign: "center" }}>
+              En production, ce bouton ouvre le portail sécurisé de gestion (Stripe), où la résiliation et les moyens de paiement sont gérés.
+            </p>
           </div>
         </div>
       )}
@@ -1561,6 +1810,7 @@ const PAGE_META = {
   apropos: { title: "À propos", sub: "Notre raison d'être" },
   contact: { title: "Contact", sub: "On vous répond rapidement" },
   confidentialite: { title: "Politique de confidentialité", sub: "Vos données, vos droits" },
+  cgv: { title: "Conditions Générales de Vente et d'Utilisation", sub: "CGV / CGU" },
   mentions: { title: "Mentions légales", sub: "Informations légales" },
 };
 
@@ -1574,29 +1824,46 @@ function PageContent({ page }) {
   );
   if (page === "contact") return (
     <>
-      <PageBlock h="Une question, une suggestion ?">Écris-nous à <Fill>contact@tremplin.app</Fill> — nous répondons généralement sous 48h ouvrées.</PageBlock>
-      <PageBlock h="Support">Pour toute question sur ton abonnement ou un problème technique : <Fill>support@tremplin.app</Fill>.</PageBlock>
-      <PageBlock h="Réseaux">Retrouve-nous sur <Fill>LinkedIn</Fill> et <Fill>Instagram</Fill> (à compléter avec tes liens).</PageBlock>
+      <PageBlock h="Une question, une suggestion ?">Écris-nous à contact@tremplin.tech — nous répondons généralement sous 48h ouvrées.</PageBlock>
+      <PageBlock h="Support">Pour toute question sur ton abonnement ou un problème technique : contact@tremplin.tech.</PageBlock>
+      <PageBlock h="Réseaux">Retrouve-nous sur LinkedIn et Instagram (à compléter avec tes liens).</PageBlock>
     </>
   );
   if (page === "confidentialite") return (
     <>
-      <LegalNote />
-      <PageBlock h="Responsable du traitement">Le responsable du traitement des données est <Fill>[Nom de la société / de l'éditeur]</Fill>, joignable à <Fill>contact@tremplin.app</Fill>.</PageBlock>
-      <PageBlock h="Données collectées">Compte (nom, e-mail via la connexion Google), informations saisies pour générer tes documents (parcours, expériences, photo), et données de paiement gérées par notre prestataire <Fill>[Stripe]</Fill> — nous ne stockons pas ton numéro de carte.</PageBlock>
+      <PageBlock h="Responsable du traitement">Le responsable du traitement des données est tremplin.ai, joignable à contact@tremplin.tech.</PageBlock>
+      <PageBlock h="Données collectées">Compte (nom, e-mail via la connexion Google), informations saisies pour générer tes documents (parcours, expériences, photo), et données de paiement gérées par notre prestataire de paiement — nous ne stockons pas ton numéro de carte.</PageBlock>
       <PageBlock h="Finalités">Création de ton compte, génération de tes documents, gestion de ton abonnement, et amélioration du service.</PageBlock>
-      <PageBlock h="Durée de conservation">Tes données sont conservées tant que ton compte est actif, puis supprimées sous <Fill>[délai à définir, ex. 12 mois]</Fill> après résiliation.</PageBlock>
-      <PageBlock h="Tes droits (RGPD)">Tu disposes d'un droit d'accès, de rectification, de suppression, de portabilité et d'opposition. Pour les exercer : <Fill>contact@tremplin.app</Fill>. Tu peux aussi saisir la CNIL.</PageBlock>
+      <PageBlock h="Durée de conservation">Tes données sont conservées tant que ton compte est actif, puis supprimées sous 12 mois après résiliation.</PageBlock>
+      <PageBlock h="Tes droits (RGPD)">Tu disposes d'un droit d'accès, de rectification, de suppression, de portabilité et d'opposition. Pour les exercer : contact@tremplin.tech. Tu peux aussi saisir la CNIL.</PageBlock>
+      <PageBlock h="Base légale">Le traitement repose sur l'exécution du contrat (fournir le service et gérer ton abonnement), ton consentement (cookies de mesure, le cas échéant) et notre intérêt légitime (sécurité et amélioration du service).</PageBlock>
+      <PageBlock h="Sous-traitants et hébergement">Tes données sont hébergées par Hostinger. Nous faisons appel à des prestataires pour la connexion et la base de données, le paiement et la génération de texte. Ces prestataires n'utilisent tes données que pour fournir leur service.</PageBlock>
+      <PageBlock h="Sécurité">Nous mettons en œuvre des mesures techniques pour protéger tes données (accès restreint, chiffrement des échanges). Aucun système n'étant infaillible, nous t'invitons à utiliser un mot de passe solide pour ton compte Google.</PageBlock>
       <PageBlock h="Cookies">Nous utilisons des cookies nécessaires au fonctionnement (connexion). Les cookies de mesure d'audience ne sont déposés qu'avec ton consentement.</PageBlock>
+      <PageBlock h="Suppression de ton compte">Tu peux demander la suppression de ton compte et de tes documents à tout moment via contact@tremplin.tech ; la suppression est effective sous 30 jours.</PageBlock>
+    </>
+  );
+  if (page === "cgv") return (
+    <>
+      <PageBlock h="1. Objet">Les présentes conditions régissent l'utilisation du service Tremplin (le « Service ») et la vente de ses abonnements. En créant un compte ou en souscrivant, l'utilisateur accepte sans réserve les présentes conditions.</PageBlock>
+      <PageBlock h="2. Description du service">Tremplin propose des outils d'aide à la candidature assistés par IA : génération et édition de CV, de lettres de motivation et préparation d'entretien. Une offre gratuite (1 CV, connexion requise) et un abonnement Premium sont proposés.</PageBlock>
+      <PageBlock h="3. Compte">L'accès nécessite la création d'un compte via la connexion Google. L'utilisateur s'engage à fournir des informations exactes et à préserver la confidentialité de son accès. Il est responsable de l'usage fait de son compte.</PageBlock>
+      <PageBlock h="4. Prix et paiement">L'abonnement Premium est proposé au prix de 9,90 € par mois, toutes taxes comprises. Le paiement s'effectue par carte bancaire via notre prestataire de paiement. L'abonnement est reconduit automatiquement chaque mois jusqu'à résiliation.</PageBlock>
+      <PageBlock h="5. Durée et résiliation">L'abonnement est mensuel, sans engagement de durée. L'utilisateur peut résilier à tout moment depuis son espace ou en écrivant à contact@tremplin.tech ; la résiliation prend effet à la fin de la période mensuelle en cours, sans remboursement du mois entamé.</PageBlock>
+      <PageBlock h="6. Droit de rétractation">Conformément au Code de la consommation, l'utilisateur dispose d'un délai de 14 jours pour se rétracter. Toutefois, en demandant l'accès immédiat au Service (contenu numérique fourni sans support matériel), l'utilisateur reconnaît renoncer à son droit de rétractation une fois l'exécution commencée.</PageBlock>
+      <PageBlock h="7. Obligations de l'utilisateur">L'utilisateur s'engage à un usage licite du Service, à ne pas le revendre, ni tenter d'en perturber le fonctionnement. Il est seul responsable de l'exactitude des informations qu'il saisit et du contenu final de ses documents.</PageBlock>
+      <PageBlock h="8. Responsabilité">Le Service s'appuie sur une intelligence artificielle qui peut produire des erreurs ou imprécisions : l'utilisateur garde le contrôle final et doit relire ses documents. Tremplin ne garantit aucun résultat (entretien, embauche). La responsabilité de l'éditeur ne saurait être engagée pour les conséquences de l'usage des documents générés.</PageBlock>
+      <PageBlock h="9. Propriété intellectuelle">Les documents générés appartiennent à l'utilisateur, qui peut les utiliser librement. Le Service lui-même (marque, code, design) reste la propriété exclusive de l'éditeur.</PageBlock>
+      <PageBlock h="10. Données personnelles">Le traitement des données est décrit dans la Politique de confidentialité, que l'utilisateur reconnaît avoir lue.</PageBlock>
+      <PageBlock h="11. Réclamations et médiation">Pour toute réclamation : contact@tremplin.tech. Conformément à la réglementation, l'utilisateur consommateur peut recourir gratuitement à un médiateur de la consommation.</PageBlock>
+      <PageBlock h="12. Droit applicable">Les présentes conditions sont soumises au droit français. À défaut de résolution amiable, les tribunaux français sont compétents.</PageBlock>
     </>
   );
   if (page === "mentions") return (
     <>
-      <LegalNote />
-      <PageBlock h="Éditeur du site">Ce site est édité par <Fill>[Nom / raison sociale]</Fill>, <Fill>[forme juridique, ex. SAS]</Fill> au capital de <Fill>[montant]</Fill>, dont le siège est situé <Fill>[adresse]</Fill>. Immatriculée au RCS de <Fill>[ville]</Fill> sous le numéro <Fill>[SIRET / RCS]</Fill>. TVA intracommunautaire : <Fill>[n° TVA]</Fill>.</PageBlock>
-      <PageBlock h="Directeur de la publication"><Fill>[Nom du directeur de la publication]</Fill>.</PageBlock>
-      <PageBlock h="Contact"><Fill>contact@tremplin.app</Fill> — <Fill>[téléphone]</Fill>.</PageBlock>
-      <PageBlock h="Hébergeur">Le site est hébergé par <Fill>[nom de l'hébergeur, ex. Vercel / OVH]</Fill>, <Fill>[adresse de l'hébergeur]</Fill>, <Fill>[téléphone]</Fill>.</PageBlock>
+      <PageBlock h="Éditeur du site">Ce site est édité par tremplin.ai. Directeur du site : tremplin.tech.</PageBlock>
+      <PageBlock h="Contact">contact@tremplin.tech.</PageBlock>
+      <PageBlock h="Hébergeur">Le site est hébergé par Hostinger.</PageBlock>
       <PageBlock h="Propriété intellectuelle">L'ensemble des contenus de ce site est protégé. Toute reproduction sans autorisation est interdite.</PageBlock>
     </>
   );
@@ -1607,7 +1874,7 @@ function StaticPage({ page, onHome, onStart, onNavigate }) {
   const meta = PAGE_META[page] || { title: "Page", sub: "" };
   const NAV = [
     { t: "À propos", page: "apropos" }, { t: "Contact", page: "contact" },
-    { t: "Confidentialité", page: "confidentialite" }, { t: "Mentions légales", page: "mentions" },
+    { t: "Confidentialité", page: "confidentialite" }, { t: "CGV", page: "cgv" }, { t: "Mentions légales", page: "mentions" },
   ];
   return (
     <div style={{ minHeight: "100vh", background: "#fff", display: "flex", flexDirection: "column" }}>
