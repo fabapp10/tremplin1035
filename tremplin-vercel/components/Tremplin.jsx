@@ -1670,8 +1670,24 @@ function Workspace({ account, setAccount, onLogout }) {
   const removeDocument = async (id) => { setDocs(await deleteDoc(account.email, id)); };
   const openSaved = (d) => { setRestore(d); setView(d.type); setMenu(false); };
   const openModule = (id) => { setRestore(null); if (has(id)) setView(id); else setUpgrade(true); };
-  const doUpgrade = () => { setAccount({ ...account, plan: PLANS.complet }); setUpgrade(false); };
-  const doCancel = () => { setAccount({ ...account, plan: PLANS.gratuit }); setManage(false); setView("home"); };
+  const doUpgrade = async () => {
+    if (!supabase) { setAccount({ ...account, plan: PLANS.complet }); setUpgrade(false); return; }
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: session && session.access_token }) });
+      const json = await res.json();
+      if (json.url) { window.location.href = json.url; } else { alert("Paiement indisponible pour le moment."); }
+    } catch (e) { console.error(e); alert("Paiement indisponible pour le moment."); }
+  };
+  const doCancel = async () => {
+    if (!supabase) { setAccount({ ...account, plan: PLANS.gratuit }); setManage(false); setView("home"); return; }
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/portal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: session && session.access_token }) });
+      const json = await res.json();
+      if (json.url) { window.location.href = json.url; } else { alert("Gestion d'abonnement indisponible pour le moment."); }
+    } catch (e) { console.error(e); alert("Gestion d'abonnement indisponible pour le moment."); }
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: `radial-gradient(circle at 20% 0%, ${C.paperDeep}, ${C.paper})`, padding: "0 18px" }}>
@@ -1917,14 +1933,28 @@ export default function Tremplin() {
   const [onboarding, setOnboarding] = useState(false);
   const [pendingPlan, setPendingPlan] = useState(null);
 
-  const accountFromUser = (u) => ({ name: (u.user_metadata && u.user_metadata.full_name) || u.email, email: u.email, plan: PLANS.gratuit });
+  const planFromString = (s) => (s === "premium" ? PLANS.complet : PLANS.gratuit);
+  const applyUser = async (u) => {
+    let plan = PLANS.gratuit;
+    if (supabase) {
+      try {
+        const { data } = await supabase.from("profiles").select("plan").eq("id", u.id).maybeSingle();
+        if (!data) { await supabase.from("profiles").insert({ id: u.id }); }
+        else { plan = planFromString(data.plan); }
+      } catch (e) { console.error("profil", e); }
+    }
+    setAccount({ name: (u.user_metadata && u.user_metadata.full_name) || u.email, email: u.email, id: u.id, plan });
+  };
   useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => { if (data.session && data.session.user) setAccount(accountFromUser(data.session.user)); });
+    supabase.auth.getSession().then(({ data }) => { if (data.session && data.session.user) applyUser(data.session.user); });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      setAccount(session && session.user ? accountFromUser(session.user) : null);
-      if (session && session.user) { setOnboarding(false); setPendingPlan(null); }
+      if (session && session.user) { applyUser(session.user); setOnboarding(false); setPendingPlan(null); }
+      else { setAccount(null); }
     });
+    if (typeof window !== "undefined" && window.location.search.indexOf("paiement=ok") !== -1) {
+      setTimeout(() => { supabase.auth.getUser().then(({ data }) => { if (data.user) applyUser(data.user); }); }, 2500);
+    }
     return () => { if (sub && sub.subscription) sub.subscription.unsubscribe(); };
   }, []);
 
