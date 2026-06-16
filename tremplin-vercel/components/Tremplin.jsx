@@ -7,6 +7,7 @@ import {
   Briefcase, GraduationCap, Languages, Heart, Wrench, Download,
   Lock, LogOut, Star, Zap, Clock, Target, Settings, Save, FolderOpen, Trash2
 } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
 
 /* ============================================================
    TREMPLIN — assistant de candidature propulsé par l'IA
@@ -796,8 +797,8 @@ function ModuleLettre({ restore, onSave } = {}) {
   const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }));
   const [out, setOut] = useState(restore?.out || null); const [raw, setRaw] = useState("");
   const [loading, setLoading] = useState(false); const [err, setErr] = useState("");
-
-  const dateFr = new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+  const [dateFr, setDateFr] = useState("");
+  useEffect(() => { setDateFr(new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })); }, []);
 
   async function generate() {
     setErr(""); setOut(null); setRaw(""); setLoading(true);
@@ -1217,7 +1218,8 @@ const SAMPLE_T = { primary: C.ink, accent: C.amber, accentDeep: C.amberDeep, pap
 
 /* Exemple de lettre de motivation (statique, pour la vitrine) */
 function SampleLetter() {
-  const dateFr = new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+  const [dateFr, setDateFr] = useState("");
+  useEffect(() => { setDateFr(new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })); }, []);
   return (
     <div style={{ background: "#fff", borderRadius: 12, padding: "34px 38px", border: `1px solid ${C.line}`, fontFamily: "'Hanken Grotesk',sans-serif", color: C.ink, boxShadow: "0 14px 40px -26px rgba(25,40,61,.4)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 30, flexWrap: "wrap" }}>
@@ -1561,7 +1563,7 @@ function Landing({ onStart, goSection, onNavigate }) {
 /* ============================================================
    ONBOARDING (choix forfait + connexion Google)
    ============================================================ */
-function Onboarding({ pendingPlan, onClose, onComplete }) {
+function Onboarding({ pendingPlan, onClose, onComplete, onGoogle }) {
   const [plan, setPlan] = useState(pendingPlan);
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(25,40,61,.55)", backdropFilter: "blur(4px)", display: "grid", placeItems: "center", padding: 18 }}>
@@ -1596,7 +1598,7 @@ function Onboarding({ pendingPlan, onClose, onComplete }) {
               Forfait <strong style={{ color: C.ink }}>{plan.name}</strong>{plan.free ? " · gratuit" : ` · ${plan.price}€/mois`}
               <button onClick={() => setPlan(null)} style={{ background: "none", border: "none", color: C.amberDeep, cursor: "pointer", fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 13, fontWeight: 600, marginLeft: 8, textDecoration: "underline" }}>changer</button>
             </p>
-            <GoogleBtn onClick={() => onComplete({ name: "Camille Dubois", email: "camille.dubois@gmail.com", plan })} />
+            <GoogleBtn onClick={onGoogle} />
             <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "16px 0", color: C.muted }}>
               <span style={{ flex: 1, height: 1, background: C.line }} /><span style={{ fontFamily: "'Hanken Grotesk',sans-serif", fontSize: 12 }}>ou</span><span style={{ flex: 1, height: 1, background: C.line }} />
             </div>
@@ -1916,8 +1918,24 @@ export default function Tremplin() {
   const [onboarding, setOnboarding] = useState(false);
   const [pendingPlan, setPendingPlan] = useState(null);
 
+  const accountFromUser = (u) => ({ name: (u.user_metadata && u.user_metadata.full_name) || u.email, email: u.email, plan: PLANS.gratuit });
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => { if (data.session && data.session.user) setAccount(accountFromUser(data.session.user)); });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setAccount(session && session.user ? accountFromUser(session.user) : null);
+      if (session && session.user) { setOnboarding(false); setPendingPlan(null); }
+    });
+    return () => { if (sub && sub.subscription) sub.subscription.unsubscribe(); };
+  }, []);
+
   const start = (plan) => { setPendingPlan(plan); setOnboarding(true); };
   const complete = (acc) => { setAccount(acc); setOnboarding(false); setPendingPlan(null); };
+  const signInGoogle = async () => {
+    if (supabase) { await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } }); }
+    else { complete({ name: "Camille Dubois", email: "camille.dubois@gmail.com", plan: pendingPlan || PLANS.gratuit }); }
+  };
+  const logout = async () => { if (supabase) { try { await supabase.auth.signOut(); } catch (e) {} } setAccount(null); };
   const navigate = (p) => { setPage(p); window.scrollTo({ top: 0 }); };
   const scrollToId = (id) => {
     if (id === "haut") { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
@@ -1932,7 +1950,7 @@ export default function Tremplin() {
 
   let body;
   if (page !== "home") body = <StaticPage page={page} onHome={() => navigate("home")} onStart={start} onNavigate={navigate} />;
-  else if (account) body = <Workspace account={account} setAccount={setAccount} onLogout={() => setAccount(null)} />;
+  else if (account) body = <Workspace account={account} setAccount={setAccount} onLogout={logout} />;
   else body = <Landing onStart={start} goSection={goSection} onNavigate={navigate} />;
 
   return (
@@ -1940,7 +1958,7 @@ export default function Tremplin() {
       <style>{FONTS}</style>
       {body}
       {onboarding && !account && (
-        <Onboarding pendingPlan={pendingPlan} onClose={() => setOnboarding(false)} onComplete={complete} />
+        <Onboarding pendingPlan={pendingPlan} onClose={() => setOnboarding(false)} onComplete={complete} onGoogle={signInGoogle} />
       )}
     </>
   );
