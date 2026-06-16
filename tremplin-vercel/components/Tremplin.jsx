@@ -413,31 +413,30 @@ function PhotoCropper({ cv, update }) {
   );
 }
 
-/* Mémoire des documents par compte (localStorage + repli mémoire si indisponible) */
-const _docMem = {};
-function _docKey(email) { return "tremplin_docs_" + (email || "anon"); }
-function loadDocs(email) {
-  const k = _docKey(email);
-  try { const raw = window.localStorage.getItem(k); return raw ? JSON.parse(raw) : (_docMem[k] || []); }
-  catch { return _docMem[k] || []; }
+/* Mémoire des documents — base de données Supabase (synchronisée multi-appareils) */
+function _mapDoc(r) { return { id: r.id, type: r.type, title: r.title, data: r.data, savedAt: new Date(r.created_at).getTime() }; }
+async function loadDocs(email) {
+  if (!supabase) return [];
+  const { data, error } = await supabase.from("documents").select("id,type,title,data,created_at").order("created_at", { ascending: false });
+  if (error) { console.error("loadDocs", error); return []; }
+  return (data || []).map(_mapDoc);
 }
-function _persistDocs(email, docs) {
-  const k = _docKey(email); _docMem[k] = docs;
-  try { window.localStorage.setItem(k, JSON.stringify(docs)); } catch {}
+async function saveDoc(email, doc) {
+  if (!supabase) return null;
+  if (doc.id) {
+    const { data, error } = await supabase.from("documents").update({ type: doc.type, title: doc.title, data: doc.data }).eq("id", doc.id).select().single();
+    if (error) { console.error("saveDoc/update", error); return null; }
+    return _mapDoc(data);
+  }
+  const { data: u } = await supabase.auth.getUser();
+  const uid = u && u.user ? u.user.id : null;
+  const { data, error } = await supabase.from("documents").insert({ user_id: uid, type: doc.type, title: doc.title, data: doc.data }).select().single();
+  if (error) { console.error("saveDoc/insert", error); return null; }
+  return _mapDoc(data);
 }
-function saveDoc(email, doc) {
-  const docs = loadDocs(email);
-  const id = doc.id || ("d" + Date.now());
-  const rec = { ...doc, id, savedAt: Date.now() };
-  const i = docs.findIndex((d) => d.id === id);
-  if (i >= 0) docs[i] = rec; else docs.unshift(rec);
-  _persistDocs(email, docs);
-  return rec;
-}
-function deleteDoc(email, id) {
-  const docs = loadDocs(email).filter((d) => d.id !== id);
-  _persistDocs(email, docs);
-  return docs;
+async function deleteDoc(email, id) {
+  if (supabase) { const { error } = await supabase.from("documents").delete().eq("id", id); if (error) console.error("deleteDoc", error); }
+  return await loadDocs(email);
 }
 /* Bouton "Enregistrer dans mon compte" avec retour visuel */
 function SaveDocButton({ make, onSave }) {
@@ -1663,12 +1662,12 @@ function Workspace({ account, setAccount, onLogout }) {
   const [manage, setManage] = useState(false);
   const [docs, setDocs] = useState([]);
   const [restore, setRestore] = useState(null);
-  useEffect(() => { setDocs(loadDocs(account.email)); }, [account.email]);
+  useEffect(() => { let on = true; loadDocs(account.email).then((d) => { if (on) setDocs(d); }); return () => { on = false; }; }, [account.email]);
   const plan = account.plan;
   const has = (id) => plan.tools.includes(id);
 
-  const saveDocument = (doc) => { saveDoc(account.email, doc); setDocs(loadDocs(account.email)); };
-  const removeDocument = (id) => { setDocs(deleteDoc(account.email, id)); };
+  const saveDocument = async (doc) => { await saveDoc(account.email, doc); setDocs(await loadDocs(account.email)); };
+  const removeDocument = async (id) => { setDocs(await deleteDoc(account.email, id)); };
   const openSaved = (d) => { setRestore(d); setView(d.type); setMenu(false); };
   const openModule = (id) => { setRestore(null); if (has(id)) setView(id); else setUpgrade(true); };
   const doUpgrade = () => { setAccount({ ...account, plan: PLANS.complet }); setUpgrade(false); };
