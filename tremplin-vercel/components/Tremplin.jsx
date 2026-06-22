@@ -75,11 +75,14 @@ html { scroll-behavior: smooth; }
 
 /* ---------- appel API Claude (texte + vision) ---------- */
 async function callClaude(messages, system) {
+  let _token = null;
+  if (supabase) { try { const { data } = await supabase.auth.getSession(); _token = data.session && data.session.access_token; } catch (e) {} }
   const res = await fetch("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ system, messages }),
+    body: JSON.stringify({ system, messages, token: _token }),
   });
+  if (res.status === 403) throw new Error("limit");
   if (!res.ok) throw new Error("Erreur API " + res.status);
   const data = await res.json();
   return (data.content || [])
@@ -223,6 +226,7 @@ function ModuleCV({ freeLimit, used = 0, onUse, restore, onSave } = {}) {
   const [err, setErr] = useState("");
   const [tpl, setTpl] = useState(restore?.tpl || "atlas");
   const [theme, setTheme] = useState(restore?.theme || THEMES[0]);
+  const [blocked, setBlocked] = useState(false);
   const photoRef = useRef(null);
 
   const update = (path, val) => setCv((c) => setIn(c, path, val));
@@ -246,11 +250,11 @@ function ModuleCV({ freeLimit, used = 0, onUse, restore, onSave } = {}) {
           competences: p.competences || [], langues: p.langues || [], interets: p.interets || [],
         });
       } catch { setCv(null); }
-    } catch (e) { setErr("Impossible de générer le CV. Réessaie dans un instant."); }
+    } catch (e) { if (String(e && e.message) === "limit") { setBlocked(true); } else { setErr("Impossible de générer le CV. Réessaie dans un instant."); } }
     setLoading(false);
   }
 
-  const limitReached = typeof freeLimit === "number" && used >= freeLimit;
+  const limitReached = blocked || (typeof freeLimit === "number" && used >= freeLimit);
   const ready = f.nom && f.titre && (f.exp || f.formation);
 
   return (
